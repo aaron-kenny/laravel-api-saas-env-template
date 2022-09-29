@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: laravel-product-two
+spec:
+  selector:
+    matchLabels:
+      app: laravel-product-two
+  template:
+    metadata:
+      labels:
+        app: laravel-product-two
+    spec:
+      serviceAccountName: INSERT_SERVICE_ACCOUNT_NAME
+      initContainers:
+      - name: init-shared-data
+        image: INSERT_PATH_TO_REPO/laravel-product-two
+        resources:
+          requests:
+            cpu: 10m
+            memory: 20M
+          limits:
+            cpu: 400m
+            memory: 400M
+        envFrom:
+        - secretRef:
+            name: laravel-product-two-env
+        volumeMounts:
+        - name: laravel-product-two-shared-data
+          mountPath: /shared-data
+        command: ['cp', '-a', '/var/www/html/.', '/shared-data' ]
+      containers:
+      - name: laravel
+        image: INSERT_PATH_TO_REPO/laravel-product-two
+        resources:
+          requests:
+            cpu: 10m
+            memory: 20M
+          limits:
+            cpu: 400m
+            memory: 400M
+        envFrom:
+        - secretRef:
+            name: laravel-product-two-env
+        command: ['/bin/sh']
+        args: ['-c', 'php artisan route:cache; php artisan view:cache; php artisan config:cache; php-fpm']
+      - name: nginx
+        image: nginx:1.19.3-alpine
+        resources:
+          requests:
+            cpu: 10m
+            memory: 20M
+          limits:
+            cpu: 400m
+            memory: 400M
+        volumeMounts:
+          - name: laravel-product-two-shared-data
+            mountPath: /var/www/html
+          - name: laravel-product-two-config
+            mountPath: /etc/nginx/conf.d/default.conf
+            subPath: default.conf
+      - name: cloud-sql-proxy
+        image: gcr.io/cloudsql-docker/gce-proxy:1.20.2-alpine
+        resources:
+          requests:
+            cpu: 10m
+            memory: 20M
+          limits:
+            cpu: 500m
+            memory: 500M
+        command: ['/cloud_sql_proxy', '-ip_address_types=PRIVATE', '-instances=INSERT_INSTANCE_CONNECTION_STRING', '-log_debug_stdout=true']
+        securityContext:
+          runAsNonRoot: true
+      volumes:
+      - name: laravel-product-two-shared-data
+        emptyDir: {}
+      - name: laravel-product-two-config
+        configMap:
+          name: laravel-product-two-config
